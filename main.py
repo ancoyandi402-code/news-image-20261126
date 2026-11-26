@@ -1,35 +1,23 @@
 #!/usr/bin/env python3
-"""Sum up 26 November 2026 world news in one image.
+"""One-day newspaper front page: Thursday 26 November 2026.
 
-Writes a 1024x1024 PNG newspaper front page to /output/entry.png
-(or $MAKEFUN_OUTPUT_DIR/entry.png). Deterministic: no network, no clock,
-no randomness -- the same bytes come out on every run.
+Renders a 1024x1024 PNG to /output/entry.png (or $MAKEFUN_OUTPUT_DIR).
+Pure Pillow drawing: no network, no clock, no randomness, so every run
+produces identical bytes.
 
-REDESIGN -- what the two failed entries (24 & 25 Nov) taught us:
-- Both passed every validity check, then were eliminated in blind
-  pairwise judging. The judge (an AI model) compares images, and the
-  criteria say legibility is judged at ~300px. At 300px our 25 Nov
-  page was a grey wall of small text: only the masthead and date
-  could be read, the 35 stories were invisible noise.
-- The entries that win 12-0 read at 300px: a huge date, a key-numbers
-  strip in LARGE type, 3-4 lead stories with BIG headlines and BIG
-  illustrations, then a map and a brief list. So this page is built
-  for 300px first: the top half must be fully readable when shrunk,
-  and the dense brief list underneath proves breadth at full size.
-- Every story is numbered, tagged by region, and sourced, so a
-  stranger can check it. A map with numbered pins and a DATE CHECK
-  box name what was left out on purpose (yesterday's news).
+Design rule: the page is built to be read at 300px, the size the
+make.fun judge sees. The top half carries the whole day at a glance --
+a huge date, a strip of key numbers in large type, one big lead story
+with a drawn illustration, and two big panels. The dense brief list,
+map and DATE CHECK underneath prove breadth at full size.
 
-What this page adds that the leaders do not:
-- A WHY IT MATTERS line on the lead, so a reader who missed the day
-  understands the stakes, not just the headline.
-- The lead is the one story that could only happen today: the 100th
-  Macy's Thanksgiving Day Parade -- which the leaders bury.
-
-News: 39 world stories of Thursday 26 November 2026, as reported by
-Reuters / AP / AFP / BBC / Yonhap / TfL and wire desks that day.
+39 stories, all dated 26 November 2026, each numbered, tagged by
+region and sourced. The DATE CHECK box names what was deliberately
+left out: the previous days' news (Hormuz, Nvidia, COP31, ICJ
+Myanmar, Sanofi/Insmed).
 """
 
+import math
 import os
 from PIL import Image, ImageDraw, ImageFont
 
@@ -39,7 +27,6 @@ INK = (18, 18, 18)
 RED = (155, 28, 28)
 NAVY = (20, 32, 64)
 GREY = (90, 88, 82)
-LGREY = (210, 206, 198)
 BLUE = (58, 110, 165)     # sea
 LAND = (196, 178, 138)    # map land
 GOLD = (200, 160, 40)
@@ -49,7 +36,7 @@ CW = W - 2 * MARGIN
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 
-def font(name, size):
+def load_font(name, size):
     for path in (os.path.join(HERE, "fonts", name),
                  os.path.join(HERE, name)):
         if os.path.exists(path):
@@ -57,12 +44,20 @@ def font(name, size):
     return ImageFont.truetype(name, size)
 
 
-F_SERIF_B = lambda s: font("DejaVuSerif-Bold.ttf", s)
-F_SANS = lambda s: font("DejaVuSans.ttf", s)
-F_SANS_B = lambda s: font("DejaVuSans-Bold.ttf", s)
+def serif_b(size):
+    return load_font("DejaVuSerif-Bold.ttf", size)
+
+
+def sans(size):
+    return load_font("DejaVuSans.ttf", size)
+
+
+def sans_b(size):
+    return load_font("DejaVuSans-Bold.ttf", size)
 
 
 def wrap(draw, text, fnt, max_w):
+    """Greedy word wrap: lines that fit max_w by measured text length."""
     words = text.split()
     lines, cur = [], ""
     for word in words:
@@ -83,8 +78,10 @@ def rule(draw, x0, y, x1, weight=1, fill=INK):
     return y + weight
 
 
-# ---- The 42 stories ----
-LEAD = (1, "UNITED STATES", "A century of balloons: Macy's 100th Thanksgiving parade",
+# ---------------------------------------------------------------- stories
+# (number, region, headline, summary, source)
+LEAD = (1, "UNITED STATES",
+        "A century of balloons: Macy's 100th Thanksgiving parade",
         "A record 100 inflatables and 3 million spectators on a 2.5-mile "
         "route through New York -- but a storm may ground the giant "
         "balloons if gusts top 34 mph.",
@@ -118,6 +115,7 @@ GRID = [
      "1,220 cricketers enrolled for the 2027 auction.", "selfstudys"),
 ]
 
+# (number, one-line headline) -- trimmed to fit one column line
 ALSO = [
     (7, "Gukesh faces Sindarov"),
     (8, "India: 18 years since 26/11"),
@@ -151,6 +149,7 @@ ALSO = [
     (39, "GRSE delivers 120th warship"),
 ]
 
+# (big number, label) -- the strip that reads at 300px
 KEYNUMS = [
     ("100", "inflatables in parade"),
     ("3M", "spectators on route"),
@@ -167,32 +166,32 @@ DATECHECK = ("DATE CHECK \u2014 Every story here happened or was first reported 
              "Myanmar; Sanofi/Insmed.")
 
 
-# ---- Big illustrations (original vector art, drawn in code) ----
+# ------------------------------------------------------- drawn illustrations
 def draw_balloons(d, x, y, w, h):
-    """Thanksgiving parade balloons: three big inflatables + crowd."""
+    """Three parade inflatables over a row of heads."""
     d.rectangle([x, y, x + w, y + h], fill=(214, 232, 242), outline=INK)
-    # balloon 1: red, left
+    # red balloon, left
     cx, cy = x + w * 0.24, y + h * 0.34
     d.ellipse([cx - w * 0.13, cy - h * 0.22, cx + w * 0.13, cy + h * 0.22],
               fill=RED, outline=INK)
     d.ellipse([cx - w * 0.05, cy - h * 0.16, cx + w * 0.02, cy - h * 0.04],
               fill=(255, 120, 120))
     d.line([(cx, cy + h * 0.22), (cx, y + h * 0.78)], fill=INK, width=2)
-    # balloon 2: gold, centre, bigger
+    # gold balloon, centre, biggest
     cx, cy = x + w * 0.55, y + h * 0.30
     d.ellipse([cx - w * 0.16, cy - h * 0.24, cx + w * 0.16, cy + h * 0.24],
               fill=GOLD, outline=INK)
     d.ellipse([cx - w * 0.06, cy - h * 0.18, cx + w * 0.03, cy - h * 0.04],
               fill=(255, 220, 130))
     d.line([(cx, cy + h * 0.24), (cx, y + h * 0.78)], fill=INK, width=2)
-    # balloon 3: blue, right
+    # blue balloon, right
     cx, cy = x + w * 0.84, y + h * 0.36
     d.ellipse([cx - w * 0.11, cy - h * 0.20, cx + w * 0.11, cy + h * 0.20],
               fill=BLUE, outline=INK)
     d.ellipse([cx - w * 0.04, cy - h * 0.14, cx + w * 0.02, cy - h * 0.03],
               fill=(140, 190, 230))
     d.line([(cx, cy + h * 0.20), (cx, y + h * 0.78)], fill=INK, width=2)
-    # crowd: row of heads along the bottom
+    # crowd heads along the bottom
     for i in range(9):
         hx = x + w * (0.06 + i * 0.11)
         d.ellipse([hx - 5, y + h * 0.82, hx + 5, y + h * 0.92], fill=INK)
@@ -200,14 +199,13 @@ def draw_balloons(d, x, y, w, h):
 
 
 def draw_coin_chart(d, x, y, w, h):
-    """A coin with % and a rising chart arrow: rate hike."""
+    """A % coin and a rising arrow: the rate hike."""
     d.rectangle([x, y, x + w, y + h], fill=(250, 247, 240), outline=INK)
     cx, cy = x + w * 0.30, y + h * 0.45
     r = min(w, h) * 0.26
     d.ellipse([cx - r, cy - r, cx + r, cy + r], fill=GOLD, outline=INK,
               width=2)
-    d.text((cx, cy), "%", font=F_SERIF_B(int(r * 1.1)), fill=INK, anchor="mm")
-    # rising arrow
+    d.text((cx, cy), "%", font=serif_b(int(r * 1.1)), fill=INK, anchor="mm")
     pts = [(x + w * 0.52, y + h * 0.72), (x + w * 0.64, y + h * 0.55),
            (x + w * 0.72, y + h * 0.62), (x + w * 0.88, y + h * 0.34)]
     d.line(pts, fill=RED, width=4, joint="curve")
@@ -216,16 +214,15 @@ def draw_coin_chart(d, x, y, w, h):
 
 
 def draw_eu_building(d, x, y, w, h):
-    """EU: a columned building under a ring of stars."""
+    """Columned building under a ring of twelve stars, on navy."""
     d.rectangle([x, y, x + w, y + h], fill=(20, 32, 64), outline=INK)
     cx, cy = x + w / 2, y + h * 0.26
     for i in range(12):
-        import math
         a = math.pi * 2 * i / 12 - math.pi / 2
         sx = cx + math.cos(a) * w * 0.30
         sy = cy + math.sin(a) * h * 0.16
         d.ellipse([sx - 3, sy - 3, sx + 3, sy + 3], fill=GOLD)
-    # pediment + columns
+    # pediment, block and four columns
     bx, by = x + w * 0.16, y + h * 0.52
     bw, bh = w * 0.68, h * 0.38
     d.polygon([(bx - 6, by), (bx + bw / 2, by - h * 0.12),
@@ -236,9 +233,8 @@ def draw_eu_building(d, x, y, w, h):
         d.rectangle([colx, by + 4, colx + 8, by + bh - 4], fill=NAVY)
 
 
-# ---- Simplified world map (original, drawn in code) ----
-def continents():
-    """Rough continent polygons, map-local coordinates."""
+def continent_polys():
+    """Rough continent outlines in map-local coordinates."""
     return [
         # North America
         [(30, 25), (70, 12), (115, 18), (135, 38), (125, 58), (100, 72),
@@ -261,38 +257,38 @@ def continents():
 
 def draw_map(d, mx, my):
     mw, mh = 320, 108
-    s = mh / 190.0  # scale continent coords to the shorter box
+    s = mh / 190.0
     d.rectangle([mx, my, mx + mw, my + mh], fill=(214, 232, 242),
                 outline=INK)
-    for poly in continents():
+    for poly in continent_polys():
         pts = [(mx + px, my + py * s) for px, py in poly]
         d.polygon(pts, fill=LAND, outline=(120, 105, 70))
-    # numbered pins: (story num, map x, map y) in continent coords
-    # kept to six, spread out so no two pins overlap
+    # six numbered pins, spread so none overlap: (story, map x, map y)
     pins = [(1, 70, 42), (2, 280, 38), (3, 172, 30), (4, 150, 20),
             (8, 236, 70), (11, 198, 58)]
     for num, px, py in pins:
         cx, cy = mx + px, my + py * s
         d.ellipse([cx - 8, cy - 8, cx + 8, cy + 8], fill=RED,
                   outline=(255, 255, 255))
-        d.text((cx, cy), str(num), font=F_SANS_B(11), fill=(255, 255, 255),
+        d.text((cx, cy), str(num), font=sans_b(11), fill=(255, 255, 255),
                anchor="mm")
 
 
+# ------------------------------------------------------------------- layout
 def main():
     img = Image.new("RGB", (W, H), BG)
     d = ImageDraw.Draw(img)
 
-    # ---- Navy top bar ----
+    # ---- navy top bar ----
     d.rectangle([0, 0, W, 30], fill=NAVY)
-    d.text((MARGIN, 15), "THE WORLD IN ONE DAY", font=F_SANS_B(15),
+    d.text((MARGIN, 15), "THE WORLD IN ONE DAY", font=sans_b(15),
            fill=(255, 255, 255), anchor="lm")
     d.text((W - MARGIN, 15), "39 STORIES \u2022 6 CONTINENTS \u2022 EVERY ONE DATED",
-           font=F_SANS_B(15), fill=(255, 255, 255), anchor="rm")
+           font=sans_b(15), fill=(255, 255, 255), anchor="rm")
     y = 40
 
-    # ---- Masthead: date HUGE so it reads at 300px ----
-    d.text((W / 2, y), "Thursday 26 November 2026", font=F_SERIF_B(50),
+    # ---- masthead: date huge so it reads at 300px ----
+    d.text((W / 2, y), "Thursday 26 November 2026", font=serif_b(50),
            fill=INK, anchor="ma")
     y += 58
     y = rule(d, MARGIN, y, W - MARGIN, 3)
@@ -300,58 +296,58 @@ def main():
     y += 6
     d.text((W / 2, y), "Macy's 100th parade  \u2022  Korea hikes to 3.25%  "
            "\u2022  EU budget battle  \u2022  Tube strike",
-           font=F_SANS_B(17), fill=RED, anchor="ma")
+           font=sans_b(17), fill=RED, anchor="ma")
     y += 26
     y = rule(d, MARGIN, y, W - MARGIN, 1)
     y += 8
 
-    # ---- Key numbers strip: numbers BIG ----
+    # ---- key-numbers strip: numbers big ----
     n = len(KEYNUMS)
     bw = CW // n
     for i, (num, label) in enumerate(KEYNUMS):
         x0 = MARGIN + i * bw
         d.rectangle([x0, y, x0 + bw - 6, y + 56], outline=INK, width=1)
-        d.text((x0 + (bw - 6) / 2, y + 7), num, font=F_SERIF_B(34),
+        d.text((x0 + (bw - 6) / 2, y + 7), num, font=serif_b(34),
                fill=RED, anchor="ma")
-        for li, line in enumerate(wrap(d, label, F_SANS(11), bw - 16)):
+        for li, line in enumerate(wrap(d, label, sans(11), bw - 16)):
             d.text((x0 + (bw - 6) / 2, y + 42 + li * 13), line,
-                   font=F_SANS(11), fill=INK, anchor="ma")
+                   font=sans(11), fill=INK, anchor="ma")
     y += 56 + 8
     y = rule(d, MARGIN, y, W - MARGIN, 1)
     y += 8
 
-    # ---- Lead story: Macy's parade, illustration BIG, headline BIG ----
+    # ---- lead story: Macy's parade, big illustration, big headline ----
     num, region, head, summ, src = LEAD
     d.text((MARGIN, y), "1  \u2022  TOP STORY  \u2022  " + region,
-           font=F_SANS_B(16), fill=RED, anchor="la")
+           font=sans_b(16), fill=RED, anchor="la")
     y += 24
     lead_y = y
     ill_w, ill_h = 250, 120
     draw_balloons(d, MARGIN, lead_y + 4, ill_w, ill_h)
     tx = MARGIN + ill_w + 18
     tw = W - MARGIN - tx
-    for line in wrap(d, head, F_SERIF_B(38), tw):
-        d.text((tx, lead_y), line, font=F_SERIF_B(38), fill=INK, anchor="la")
+    for line in wrap(d, head, serif_b(38), tw):
+        d.text((tx, lead_y), line, font=serif_b(38), fill=INK, anchor="la")
         lead_y += 44
     lead_y += 4
-    for line in wrap(d, summ, F_SANS(17), tw):
-        d.text((tx, lead_y), line, font=F_SANS(17), fill=INK, anchor="la")
+    for line in wrap(d, summ, sans(17), tw):
+        d.text((tx, lead_y), line, font=sans(17), fill=INK, anchor="la")
         lead_y += 21
     lead_y += 4
-    for line in wrap(d, WHY, F_SANS_B(16), tw):
-        d.text((tx, lead_y), line, font=F_SANS_B(16), fill=RED, anchor="la")
+    for line in wrap(d, WHY, sans_b(16), tw):
+        d.text((tx, lead_y), line, font=sans_b(16), fill=RED, anchor="la")
         lead_y += 20
     y = max(lead_y, y + ill_h + 8) + 2
     y = rule(d, MARGIN, y, W - MARGIN, 1)
     y += 8
 
-    # ---- Panels: 2 across, headlines BIG ----
+    # ---- panels: two across, big headlines ----
     pw = (CW - 14) // 2
     panel_y = y
     panel_bottom = y
     for i, (num, region, head, summ, src) in enumerate(PANELS):
         x0 = MARGIN + i * (pw + 14)
-        d.text((x0, y), f"{num}  \u2022  {region}", font=F_SANS_B(14),
+        d.text((x0, y), f"{num}  \u2022  {region}", font=sans_b(14),
                fill=RED, anchor="la")
         iy = y + 22
         if i == 0:
@@ -361,21 +357,21 @@ def main():
         hx = x0 + 102
         hw2 = pw - 102
         hy = iy
-        for line in wrap(d, head, F_SERIF_B(26), hw2):
-            d.text((hx, hy), line, font=F_SERIF_B(26), fill=INK, anchor="la")
+        for line in wrap(d, head, serif_b(26), hw2):
+            d.text((hx, hy), line, font=serif_b(26), fill=INK, anchor="la")
             hy += 30
         hy += 2
-        for line in wrap(d, summ, F_SANS(14), hw2):
-            d.text((hx, hy), line, font=F_SANS(14), fill=INK, anchor="la")
+        for line in wrap(d, summ, sans(14), hw2):
+            d.text((hx, hy), line, font=sans(14), fill=INK, anchor="la")
             hy += 17
         hy += 2
-        d.text((hx, hy), f"({src})", font=F_SANS(11), fill=GREY, anchor="la")
+        d.text((hx, hy), f"({src})", font=sans(11), fill=GREY, anchor="la")
         panel_bottom = max(panel_bottom, hy + 13)
     y = panel_bottom + 6
     y = rule(d, MARGIN, y, W - MARGIN, 1)
     y += 8
 
-    # ---- Grid: 6 stories, 3 columns x 2 rows ----
+    # ---- grid: six stories, three columns by two rows ----
     gw = (CW - 2 * 12) // 3
     grid_y = y
     for r in range(2):
@@ -383,19 +379,19 @@ def main():
         for c in range(3):
             num, region, head, summ, src = GRID[r * 3 + c]
             x0 = MARGIN + c * (gw + 12)
-            d.text((x0, grid_y), f"{num}", font=F_SERIF_B(16), fill=RED,
+            d.text((x0, grid_y), f"{num}", font=serif_b(16), fill=RED,
                    anchor="la")
-            d.text((x0 + 26, grid_y), region, font=F_SANS_B(11), fill=RED,
+            d.text((x0 + 26, grid_y), region, font=sans_b(11), fill=RED,
                    anchor="la")
             hy = grid_y + 20
-            for line in wrap(d, head, F_SERIF_B(19), gw):
-                d.text((x0, hy), line, font=F_SERIF_B(19), fill=INK,
+            for line in wrap(d, head, serif_b(19), gw):
+                d.text((x0, hy), line, font=serif_b(19), fill=INK,
                        anchor="la")
                 hy += 22
-            for line in wrap(d, summ, F_SANS(13), gw):
-                d.text((x0, hy), line, font=F_SANS(13), fill=INK, anchor="la")
+            for line in wrap(d, summ, sans(13), gw):
+                d.text((x0, hy), line, font=sans(13), fill=INK, anchor="la")
                 hy += 16
-            d.text((x0, hy), f"({src})", font=F_SANS(10), fill=GREY,
+            d.text((x0, hy), f"({src})", font=sans(10), fill=GREY,
                    anchor="la")
             row_bottom = max(row_bottom, hy + 12)
         grid_y = row_bottom + 2
@@ -403,16 +399,16 @@ def main():
     y = rule(d, MARGIN, y, W - MARGIN, 1)
     y += 8
 
-    # ---- Map (left) + Also list (right, 3 columns) ----
+    # ---- map (left) + ALSO list (right, three columns) ----
     map_x, map_y = MARGIN, y
     d.text((map_x, map_y), "WHERE IT HAPPENED",
-           font=F_SANS_B(13), fill=INK, anchor="la")
+           font=sans_b(13), fill=INK, anchor="la")
     draw_map(d, map_x, map_y + 20)
     map_bottom = map_y + 20 + 108
     ax = MARGIN + 320 + 16
     aw = W - MARGIN - ax
     d.text((ax, map_y), "ALSO ON THURSDAY 26 NOVEMBER",
-           font=F_SANS_B(14), fill=INK, anchor="la")
+           font=sans_b(14), fill=INK, anchor="la")
     ay = map_y + 22
     per_col = 10
     col_w = (aw - 2 * 10) // 3
@@ -421,9 +417,9 @@ def main():
         row = i % per_col
         x0 = ax + col * (col_w + 10)
         yy = ay + row * 13
-        d.text((x0, yy), f"{num}", font=F_SANS_B(11), fill=RED, anchor="la")
+        d.text((x0, yy), f"{num}", font=sans_b(11), fill=RED, anchor="la")
         # one line each: trim the headline until it fits the column
-        fnt = F_SANS(11)
+        fnt = sans(11)
         max_w = col_w - 26
         while head and d.textlength(head, font=fnt) > max_w:
             head = head[:-1]
@@ -433,11 +429,11 @@ def main():
     y = rule(d, MARGIN, y, W - MARGIN, 1)
     y += 6
 
-    # ---- Date check box ----
+    # ---- date check box ----
     box_h = 46
     d.rectangle([MARGIN, y, W - MARGIN, y + box_h], outline=RED, width=2)
-    for li, line in enumerate(wrap(d, DATECHECK, F_SANS(12), CW - 24)):
-        d.text((MARGIN + 12, y + 5 + li * 13), line, font=F_SANS(12),
+    for li, line in enumerate(wrap(d, DATECHECK, sans(12), CW - 24)):
+        d.text((MARGIN + 12, y + 5 + li * 13), line, font=sans(12),
                fill=INK, anchor="la")
     y += box_h
     print("final y:", y, "of", H)
